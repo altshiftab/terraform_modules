@@ -12,6 +12,7 @@ resource "google_project_service_identity" "iap" {
 
 resource "google_cloud_run_service_iam_binding" "binding" {
     project = var.project_id
+    location = var.region
     service = module.web_service.service.name
     role    = "roles/run.invoker"
     members = [

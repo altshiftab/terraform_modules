@@ -1,5 +1,6 @@
 resource "google_cloud_run_service_iam_member" "noauth" {
     project = var.project_id
+    location = var.region
     service = module.web_service.service.name
     role    = "roles/run.invoker"
     member  = "allUsers"
