@@ -1,23 +1,23 @@
 resource "google_project_service" "cloud_run" {
-    project = var.project_id
-    service = "run.googleapis.com"
+    project            = var.project_id
+    service            = "run.googleapis.com"
     disable_on_destroy = false
 }
 
 resource "google_project_service" "compute" {
-    project = var.project_id
-    service = "compute.googleapis.com"
+    project            = var.project_id
+    service            = "compute.googleapis.com"
     disable_on_destroy = false
 }
 
 resource "google_service_account" "service_account" {
-    count = var.existing_service_account_email == "" ? 1 : 0
-    project   = var.project_id
+    count      = var.existing_service_account_email == "" ? 1 : 0
+    project    = var.project_id
     account_id = "${var.name}-sa"
 }
 
 resource "google_project_iam_member" "cloudsql_client" {
-    count = length(var.cloud_sql_connections) > 0 ? 1 : 0
+    count   = length(var.cloud_sql_connections) > 0 ? 1 : 0
     project = var.project_id
     role    = "roles/cloudsql.client"
     member  = "serviceAccount:${var.existing_service_account_email != "" ? var.existing_service_account_email : google_service_account.service_account[0].email}"
@@ -25,7 +25,7 @@ resource "google_project_iam_member" "cloudsql_client" {
 
 resource "google_cloud_run_v2_service" "service" {
     project  = var.project_id
-    name = var.name
+    name     = var.name
     location = var.region
     // Block external requests to the default `.run.app` address.
     ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
@@ -48,7 +48,7 @@ resource "google_cloud_run_v2_service" "service" {
         containers {
             image = var.image_url
             ports {
-                name = var.use_http2 ? "h2c" : "http1"
+                name           = var.use_http2 ? "h2c" : "http1"
                 container_port = 8080
             }
 
@@ -78,7 +78,7 @@ resource "google_cloud_run_v2_service" "service" {
                     name = env.key
                     value_source {
                         secret_key_ref {
-                            secret = env.value
+                            secret  = env.value
                             version = "latest"
                         }
                     }
@@ -103,13 +103,13 @@ resource "google_cloud_run_v2_service" "service" {
     }
 
     deletion_protection = false
-    depends_on = [google_project_service.compute, google_project_service.cloud_run]
+    depends_on          = [google_project_service.compute, google_project_service.cloud_run]
 }
 
 resource "google_compute_region_network_endpoint_group" "network_endpoint_group" {
-    project = var.project_id
-    region = var.region
-    name = "${var.name}-network-endpoint-group"
+    project               = var.project_id
+    region                = var.region
+    name                  = "${var.name}-network-endpoint-group"
     network_endpoint_type = "SERVERLESS"
 
     cloud_run {
@@ -118,9 +118,9 @@ resource "google_compute_region_network_endpoint_group" "network_endpoint_group"
 }
 
 resource "google_compute_backend_service" "backend_service" {
-    project = var.project_id
-    name = "${var.name}-backend-service"
-    protocol = var.use_http2 ? "HTTP2" : "HTTP"
+    project               = var.project_id
+    name                  = "${var.name}-backend-service"
+    protocol              = var.use_http2 ? "HTTP2" : "HTTP"
     load_balancing_scheme = "EXTERNAL_MANAGED"
 
     backend {
@@ -128,6 +128,63 @@ resource "google_compute_backend_service" "backend_service" {
     }
 
     iap {
-        enabled = var.enable_iap
+        enabled = !var.public
     }
+}
+
+# --- Public resources ---
+
+resource "google_cloud_run_service_iam_member" "noauth" {
+    count    = var.public ? 1 : 0
+    project  = var.project_id
+    location = var.region
+    service  = google_cloud_run_v2_service.service.name
+    role     = "roles/run.invoker"
+    member   = "allUsers"
+}
+
+# --- Private (IAP) resources ---
+
+resource "google_project_service" "iap" {
+    count              = !var.public ? 1 : 0
+    project            = var.project_id
+    service            = "iap.googleapis.com"
+    disable_on_destroy = false
+}
+
+resource "google_project_service_identity" "iap" {
+    count    = !var.public ? 1 : 0
+    provider = google-beta
+    project  = var.project_id
+    service  = "iap.googleapis.com"
+}
+
+resource "google_cloud_run_service_iam_binding" "binding" {
+    count    = !var.public ? 1 : 0
+    project  = var.project_id
+    location = var.region
+    service  = google_cloud_run_v2_service.service.name
+    role     = "roles/run.invoker"
+    members = [
+        google_project_service_identity.iap[0].member,
+    ]
+}
+
+resource "google_iap_web_iam_member" "iap_members" {
+    for_each = !var.public ? toset(var.members) : toset([])
+    project  = var.project_id
+    role     = "roles/iap.httpsResourceAccessor"
+    member   = each.key
+
+    depends_on = [google_project_service.iap]
+}
+
+resource "google_iap_web_backend_service_iam_binding" "iap_enable" {
+    count               = !var.public ? 1 : 0
+    project             = var.project_id
+    web_backend_service = google_compute_backend_service.backend_service.name
+    role                = "roles/iap.httpsResourceAccessor"
+    members             = var.members
+
+    depends_on = [google_project_service.iap]
 }
