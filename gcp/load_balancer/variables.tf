@@ -17,3 +17,15 @@ variable "services" {
     )
     description = "Routing information for services."
 }
+
+variable "request_headers_to_remove" {
+    type        = list(string)
+    default     = []
+    description = "Headers to remove from the request before sending it to the backend service."
+}
+
+variable "response_headers_to_remove" {
+    type        = list(string)
+    default     = ["Server", "Via", "traceparent", "X-Cloud-Trace-Context"]
+    description = "Headers to remove from the response before sending it to the client."
+}

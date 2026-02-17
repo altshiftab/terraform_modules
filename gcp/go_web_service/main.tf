@@ -1,3 +1,8 @@
+data "google_project" "project" {
+    count   = !var.public ? 1 : 0
+    project = var.project_id
+}
+
 resource "google_project_service" "cloud_run" {
     project            = var.project_id
     service            = "run.googleapis.com"
@@ -61,6 +66,14 @@ resource "google_cloud_run_v2_service" "service" {
                 content {
                     name       = "cloudsql"
                     mount_path = "/cloudsql"
+                }
+            }
+
+            dynamic "env" {
+                for_each = !var.public ? [1] : []
+                content {
+                    name  = "IAP_JWT_AUDIENCE"
+                    value = "/projects/${data.google_project.project[0].number}/global/backendServices/${google_compute_backend_service.backend_service.generated_id}"
                 }
             }
 

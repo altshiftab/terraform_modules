@@ -67,7 +67,8 @@ resource "google_compute_url_map" "url_map_https" {
                 }
 
                 header_action {
-                    response_headers_to_remove = ["Server", "Via", "traceparent", "X-Cloud-Trace-Context"]
+                    request_headers_to_remove  = var.request_headers_to_remove
+                    response_headers_to_remove = var.response_headers_to_remove
                 }
 
                 route_action {
