@@ -204,7 +204,7 @@ resource "google_iap_web_backend_service_iam_binding" "iap_enable" {
 
 resource "google_iap_settings" "iap_settings" {
     count = !var.public ? 1 : 0
-    name  = "projects/${data.google_project.project[0].number}/iap_web/compute-${data.google_project.project[0].number}/services/${google_compute_backend_service.backend_service.generated_id}"
+    name  = "projects/${data.google_project.project[0].number}/iap_web/compute-${var.region}/services/${google_compute_backend_service.backend_service.name}"
 
     access_settings {
         cors_settings {
@@ -212,5 +212,5 @@ resource "google_iap_settings" "iap_settings" {
         }
     }
 
-    depends_on = [google_project_service.iap, google_iap_web_backend_service_iam_binding.iap_enable]
+    depends_on = [google_project_service.iap]
 }
