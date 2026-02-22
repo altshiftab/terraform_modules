@@ -211,6 +211,5 @@ resource "google_iap_settings" "iap_settings" {
             allow_http_options = true
         }
     }
-
-    depends_on = [google_project_service.iap]
+    depends_on = [google_compute_backend_service.backend_service]
 }
