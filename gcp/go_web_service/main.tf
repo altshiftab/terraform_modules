@@ -1,6 +1,6 @@
 data "google_project" "project" {
-    count   = !var.public ? 1 : 0
-    project = var.project_id
+    count      = !var.public ? 1 : 0
+    project_id = var.project_id
 }
 
 resource "google_project_service" "cloud_run" {
