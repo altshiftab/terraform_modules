@@ -47,6 +47,16 @@ variable "members" {
   default     = []
 }
 
+variable "iap_oauth_client_id" {
+  type = string
+  default = ""
+}
+
+variable "iap_oauth_client_secret" {
+  type = string
+  default = ""
+}
+
 variable "use_http2" {
   type    = bool
   default = true

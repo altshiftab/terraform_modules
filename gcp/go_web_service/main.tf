@@ -142,6 +142,8 @@ resource "google_compute_backend_service" "backend_service" {
 
     iap {
         enabled = !var.public
+        oauth2_client_id = var.iap_oauth_client_id
+        oauth2_client_secret = var.iap_oauth_client_secret
     }
 }
 
