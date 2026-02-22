@@ -183,15 +183,6 @@ resource "google_cloud_run_service_iam_binding" "binding" {
     ]
 }
 
-resource "google_iap_web_iam_member" "iap_members" {
-    for_each = !var.public ? toset(var.members) : toset([])
-    project  = var.project_id
-    role     = "roles/iap.httpsResourceAccessor"
-    member   = each.key
-
-    depends_on = [google_project_service.iap]
-}
-
 resource "google_iap_web_backend_service_iam_binding" "iap_enable" {
     count               = !var.public ? 1 : 0
     project             = var.project_id
@@ -211,5 +202,6 @@ resource "google_iap_settings" "iap_settings" {
             allow_http_options = true
         }
     }
+
     depends_on = [google_compute_backend_service.backend_service]
 }
