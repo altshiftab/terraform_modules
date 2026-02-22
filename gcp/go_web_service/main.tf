@@ -212,5 +212,5 @@ resource "google_iap_settings" "iap_settings" {
         }
     }
 
-    depends_on = [google_project_service.iap]
+    depends_on = [google_project_service.iap, google_iap_web_backend_service_iam_binding.iap_enable]
 }
