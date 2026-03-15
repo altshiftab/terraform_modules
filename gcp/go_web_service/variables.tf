@@ -48,12 +48,12 @@ variable "members" {
 }
 
 variable "iap_oauth_client_id" {
-  type = string
+  type    = string
   default = ""
 }
 
 variable "iap_oauth_client_secret" {
-  type = string
+  type    = string
   default = ""
 }
 
@@ -72,13 +72,32 @@ variable "existing_service_account_email" {
   default = ""
 }
 
-variable "vpc_connector" {
-  type    = string
-  default = null
+variable "network_interfaces" {
+  type = list(object({
+    network    = string
+    subnetwork = string
+  }))
+  default = []
 }
 
 variable "cloud_sql_connections" {
   type        = list(string)
   description = "List of Cloud SQL instance connection names to connect to."
   default     = []
+}
+
+variable "firewall_config" {
+  type = object(
+    {
+      project_id             = string
+      network_id             = string
+      subnetwork_range       = string
+      firewall_policy        = string
+      fqdns                  = list(string)
+      priority               = number
+      name                   = optional(string)
+      subnetwork_iam_members = optional(list(string), [])
+    }
+  )
+  default = null
 }
