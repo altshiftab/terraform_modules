@@ -29,3 +29,15 @@ variable "response_headers_to_remove" {
     default     = ["Server", "Via", "traceparent", "X-Cloud-Trace-Context"]
     description = "Headers to remove from the response before sending it to the client."
 }
+
+variable "request_headers_to_add" {
+    type = list(
+        object({
+            header_name  = string
+            header_value = string
+            replace      = bool
+        })
+    )
+    default     = []
+    description = "Custom request headers to add to all requests forwarded to backends."
+}

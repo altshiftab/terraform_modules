@@ -69,6 +69,16 @@ resource "google_compute_url_map" "url_map_https" {
                 header_action {
                     request_headers_to_remove  = var.request_headers_to_remove
                     response_headers_to_remove = var.response_headers_to_remove
+
+                    dynamic "request_headers_to_add" {
+                        for_each = var.request_headers_to_add
+
+                        content {
+                            header_name  = request_headers_to_add.value.header_name
+                            header_value = request_headers_to_add.value.header_value
+                            replace      = request_headers_to_add.value.replace
+                        }
+                    }
                 }
 
                 route_action {
