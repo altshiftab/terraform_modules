@@ -142,6 +142,7 @@ resource "google_compute_backend_service" "backend_service" {
   name                  = "${var.name}-backend-service"
   protocol              = var.use_http2 ? "HTTP2" : "HTTP"
   load_balancing_scheme = "EXTERNAL_MANAGED"
+  security_policy       = var.security_policy_id
 
   backend {
     group = google_compute_region_network_endpoint_group.network_endpoint_group.self_link

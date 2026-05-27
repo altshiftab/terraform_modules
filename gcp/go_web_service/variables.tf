@@ -101,3 +101,9 @@ variable "firewall_config" {
   )
   default = null
 }
+
+variable "security_policy_id" {
+  type        = string
+  description = "Optional Cloud Armor security policy (self_link / id) to attach to the backend service. Leave null to skip."
+  default     = null
+}
