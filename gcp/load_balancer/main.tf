@@ -4,6 +4,12 @@ resource "google_project_service" "compute" {
     disable_on_destroy = false
 }
 
+resource "google_project_service" "certificate_manager" {
+    project = var.project_id
+    service = "certificatemanager.googleapis.com"
+    disable_on_destroy = false
+}
+
 // URL maps
 
 resource "google_compute_health_check" "dummy_health_check" {
@@ -93,6 +99,70 @@ resource "google_compute_url_map" "url_map_https" {
     }
 }
 
+// SSL — Certificate Manager
+
+locals {
+    all_domains = distinct(flatten([for s in var.services : s.domain_names]))
+
+    services_by_key = { for s in var.services : join(",", sort(s.domain_names)) => s }
+
+    hostname_entries = {
+        for pair in flatten([
+            for s in var.services : [
+                for d in s.domain_names : {
+                    domain   = d
+                    cert_key = join(",", sort(s.domain_names))
+                }
+            ]
+        ]) : pair.domain => pair
+    }
+}
+
+resource "google_certificate_manager_dns_authorization" "auth" {
+    for_each = toset(local.all_domains)
+
+    project = var.project_id
+    name    = "dnsauth-${substr(md5(each.value), 0, 16)}"
+    domain  = each.value
+
+    depends_on = [google_project_service.certificate_manager]
+}
+
+resource "google_certificate_manager_certificate" "certificates" {
+    for_each = local.services_by_key
+
+    project = var.project_id
+    name    = "cert-${substr(md5(each.key), 0, 16)}"
+
+    managed {
+        domains            = each.value.domain_names
+        dns_authorizations = [for d in each.value.domain_names : google_certificate_manager_dns_authorization.auth[d].id]
+    }
+
+    lifecycle {
+        create_before_destroy = true
+    }
+
+    depends_on = [google_project_service.certificate_manager]
+}
+
+resource "google_certificate_manager_certificate_map" "map" {
+    project = var.project_id
+    name    = "${var.name}-cert-map"
+
+    depends_on = [google_project_service.certificate_manager]
+}
+
+resource "google_certificate_manager_certificate_map_entry" "entries" {
+    for_each = local.hostname_entries
+
+    project      = var.project_id
+    name         = "cme-${substr(md5(each.key), 0, 16)}"
+    map          = google_certificate_manager_certificate_map.map.name
+    hostname     = each.key
+    certificates = [google_certificate_manager_certificate.certificates[each.value.cert_key].id]
+}
+
 // Proxies
 
 resource "google_compute_ssl_policy" "ssl_policy" {
@@ -104,28 +174,11 @@ resource "google_compute_ssl_policy" "ssl_policy" {
     depends_on = [google_project_service.compute]
 }
 
-resource "google_compute_managed_ssl_certificate" "certificates" {
-    for_each = { for s in var.services : join(",", sort(s.domain_names)) => s }
-
-    project = var.project_id
-    name = "cert-${substr(md5(join(",", sort(each.value.domain_names))), 0, 16)}"
-
-    managed {
-        domains = each.value.domain_names
-    }
-
-    lifecycle {
-        create_before_destroy = true
-    }
-
-    depends_on = [google_project_service.compute]
-}
-
 resource "google_compute_target_https_proxy" "https_proxy" {
     project = var.project_id
     name = "${var.name}-https-proxy-v2"
     url_map = google_compute_url_map.url_map_https.self_link
-    ssl_certificates = [for cert in google_compute_managed_ssl_certificate.certificates : cert.self_link]
+    certificate_map = "//certificatemanager.googleapis.com/${google_certificate_manager_certificate_map.map.id}"
     ssl_policy = google_compute_ssl_policy.ssl_policy.self_link
 
     lifecycle {

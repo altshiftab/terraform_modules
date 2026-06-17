@@ -12,3 +12,15 @@ output "ipv6_address" {
     value = module.expand_example.expanded
     description = "The IPv6 address of the load balancer."
 }
+
+output "dns_authorizations" {
+    description = "DNS records the caller must publish so Certificate Manager can issue DV certs."
+    value = {
+        for domain, auth in google_certificate_manager_dns_authorization.auth :
+        domain => {
+            name = auth.dns_resource_record[0].name
+            type = auth.dns_resource_record[0].type
+            data = auth.dns_resource_record[0].data
+        }
+    }
+}
