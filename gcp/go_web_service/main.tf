@@ -65,6 +65,9 @@ resource "google_cloud_run_v2_service" "service" {
       }
 
       resources {
+        # Request-based billing: only pay for CPU while a request is in flight.
+        # Omitting this leaves CPU always-allocated (instance-based billing).
+        cpu_idle          = true
         startup_cpu_boost = true
       }
 
