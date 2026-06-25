@@ -11,11 +11,15 @@ resource "gws_group" "group" {
 # send-as-only identity that never receives mail. For an address that must
 # receive replies, set var.who_can_post_message accordingly (e.g.
 # ANYONE_CAN_POST) — otherwise inbound mail is silently rejected.
+#
+# Google only permits NONE_CAN_POST together with archive-only mode, so
+# archive_only is enabled automatically when posting is set to NONE_CAN_POST.
 resource "gws_group_settings" "group" {
     group_email = gws_group.group.email
 
     who_can_join                   = "INVITED_CAN_JOIN"
     who_can_post_message           = var.who_can_post_message
+    archive_only                   = var.who_can_post_message == "NONE_CAN_POST" ? "true" : "false"
     who_can_view_group             = "ALL_MANAGERS_CAN_VIEW"
     who_can_view_membership        = "ALL_MANAGERS_CAN_VIEW"
     who_can_discover_group         = "ALL_MEMBERS_CAN_DISCOVER"
