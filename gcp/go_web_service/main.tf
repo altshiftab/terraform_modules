@@ -35,6 +35,16 @@ resource "google_cloud_run_v2_service" "service" {
   // Block external requests to the default `.run.app` address.
   ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
+  lifecycle {
+    # Owned by out-of-band gcloud/CI deploys, not Terraform: a deploy stamps
+    # client/client_version and pushes the container image (often :latest).
+    ignore_changes = [
+      client,
+      client_version,
+      template[0].containers[0].image,
+    ]
+  }
+
   template {
     service_account = var.existing_service_account_email != "" ? var.existing_service_account_email : google_service_account.service_account[0].email
     // The maximum number. Go services should be able to handle a lot of concurrent requests.
@@ -155,6 +165,14 @@ resource "google_compute_backend_service" "backend_service" {
     enabled              = !var.public
     oauth2_client_id     = var.iap_oauth_client_id
     oauth2_client_secret = var.iap_oauth_client_secret
+  }
+
+  lifecycle {
+    # The IAP OAuth client is provisioned out of band; don't let Terraform clear it.
+    ignore_changes = [
+      iap[0].oauth2_client_id,
+      iap[0].oauth2_client_secret,
+    ]
   }
 }
 
