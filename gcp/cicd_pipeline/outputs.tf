@@ -32,3 +32,13 @@ output "attestor_id" {
   value       = google_binary_authorization_attestor.built_by_pipeline.id
   description = "The fully-qualified name of the Binary Authorization attestor."
 }
+
+output "publisher_service_account_email" {
+  value       = google_service_account.publisher.email
+  description = "The email of the service account publish builds run as."
+}
+
+output "npm_publish_token_secret_version_name" {
+  value       = var.npm_publish_token_secret_id != "" ? "${data.google_secret_manager_secret.npm_publish_token[0].name}/versions/latest" : ""
+  description = "The Secret Manager version resource name publish builds read their registry token from."
+}

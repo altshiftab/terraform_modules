@@ -203,6 +203,49 @@ resource "google_binary_authorization_policy" "policy" {
   }
 }
 
+# Releasing. Builds that run a repository's code must never hold credentials
+# that can write, so publishing runs as an identity of its own: it only ever
+# handles what a build already produced.
+resource "google_service_account" "publisher" {
+  project      = var.project_id
+  account_id   = "cicd-publisher"
+  display_name = "CI/CD publisher"
+}
+
+resource "google_project_iam_member" "publisher_log_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.publisher.email}"
+}
+
+resource "google_storage_bucket_iam_member" "publisher_bucket_object_admin" {
+  bucket = google_storage_bucket.cicd.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.publisher.email}"
+}
+
+data "google_secret_manager_secret" "npm_publish_token" {
+  count = var.npm_publish_token_secret_id != "" ? 1 : 0
+
+  project   = var.project_id
+  secret_id = var.npm_publish_token_secret_id
+}
+
+resource "google_secret_manager_secret_iam_member" "publisher_npm_publish_token" {
+  count = var.npm_publish_token_secret_id != "" ? 1 : 0
+
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.npm_publish_token[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.publisher.email}"
+}
+
+resource "google_service_account_iam_member" "github_app_act_as_publisher" {
+  service_account_id = google_service_account.publisher.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${var.github_app_service_account_email}"
+}
+
 # Build events.
 
 # Cloud Build publishes build state changes to this topic by virtue of its

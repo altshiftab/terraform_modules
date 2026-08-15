@@ -61,3 +61,9 @@ variable "enable_vulnerability_scanning" {
   description = "Whether to enable automatic vulnerability scanning of pushed images (billed per scanned image)."
   default     = true
 }
+
+variable "npm_publish_token_secret_id" {
+  type        = string
+  description = "The secret id of a Secret Manager secret holding a registry token that may publish. Only the publisher reads it; empty disables publishing packages."
+  default     = ""
+}
