@@ -56,6 +56,28 @@ variable "npm_token_secret_id" {
   default     = ""
 }
 
+# Retention. What the bucket holds is small — a build's reports are tens of
+# kilobytes, and caches are overwritten rather than accumulated — so these are
+# set by what is worth keeping rather than by what it costs. Reports are the
+# pipeline's only record of what a build did.
+variable "cache_retention_days" {
+  type        = number
+  description = "How long a unit's cache is kept. A repository built less often than this rebuilds from nothing."
+  default     = 90
+}
+
+variable "source_retention_days" {
+  type        = number
+  description = "How long the sources builds ran on are kept. Generated sources are not in the repository, so this is the only copy."
+  default     = 90
+}
+
+variable "report_retention_days" {
+  type        = number
+  description = "How long build reports are kept. They hold the compile output and per-test timings a build was judged on."
+  default     = 365
+}
+
 variable "enable_vulnerability_scanning" {
   type        = bool
   description = "Whether to enable automatic vulnerability scanning of pushed images (billed per scanned image)."

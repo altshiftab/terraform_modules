@@ -14,7 +14,9 @@ output "bucket_name" {
 }
 
 output "build_location" {
-  value       = google_storage_bucket.cicd.location
+  # A bucket reports its location in uppercase, which is not a spelling Cloud
+  # Build recognizes.
+  value       = lower(google_storage_bucket.cicd.location)
   description = "The location builds must be created in. Builds read and write the bucket throughout — sources, caches and reports — and transfers between regions are both charged and slow, so builds belong in the bucket's region."
 }
 

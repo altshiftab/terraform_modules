@@ -49,7 +49,8 @@ resource "google_artifact_registry_repository_iam_member" "builder_images_writer
 }
 
 # Build sources, Go build/test and lint caches, and test/lint reports, separated
-# by prefix. Everything is reproducible or ephemeral, hence the deletion rules.
+# by prefix. What is kept is decided by what is worth having rather than by what
+# it costs: the whole bucket is well under a gibibyte, at $0.023 a gibibyte-month.
 resource "google_storage_bucket" "cicd" {
   project                     = var.project_id
   name                        = "${var.project_id}-cicd"
@@ -59,7 +60,7 @@ resource "google_storage_bucket" "cicd" {
 
   lifecycle_rule {
     condition {
-      age            = 14
+      age            = var.cache_retention_days
       matches_prefix = ["cache/"]
     }
     action {
@@ -69,7 +70,7 @@ resource "google_storage_bucket" "cicd" {
 
   lifecycle_rule {
     condition {
-      age            = 30
+      age            = var.source_retention_days
       matches_prefix = ["source/"]
     }
     action {
@@ -79,7 +80,7 @@ resource "google_storage_bucket" "cicd" {
 
   lifecycle_rule {
     condition {
-      age            = 90
+      age            = var.report_retention_days
       matches_prefix = ["report/"]
     }
     action {
