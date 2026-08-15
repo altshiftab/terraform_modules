@@ -156,6 +156,9 @@ resource "google_compute_backend_service" "backend_service" {
   protocol              = var.use_http2 ? "HTTP2" : "HTTP"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   security_policy       = var.security_policy_id
+  # The default is 30 seconds, which cuts off requests that legitimately take
+  # longer than a page load — a queued job pushed to an endpoint, say.
+  timeout_sec = var.request_timeout_seconds
 
   backend {
     group = google_compute_region_network_endpoint_group.network_endpoint_group.self_link

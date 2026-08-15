@@ -107,3 +107,8 @@ variable "security_policy_id" {
   description = "Optional Cloud Armor security policy (self_link / id) to attach to the backend service. Leave null to skip."
   default     = null
 }
+variable "request_timeout_seconds" {
+  type        = number
+  description = "How long the load balancer waits for a response. The default matches Cloud Run's own request timeout."
+  default     = 300
+}
