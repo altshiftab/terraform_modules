@@ -18,6 +18,11 @@ output "signing_key_version_id" {
   description = "The KMS key version used for image signing and attestations, in projects/... form."
 }
 
+output "work_topic" {
+  value       = google_pubsub_topic.work.name
+  description = "The topic webhook deliveries enqueue build submissions on."
+}
+
 output "npm_token_secret_version_name" {
   value       = var.npm_token_secret_id != "" ? "${data.google_secret_manager_secret.npm_token[0].name}/versions/latest" : ""
   description = "The Secret Manager version resource name TypeScript unit builds read their registry token from; empty when no secret is configured."

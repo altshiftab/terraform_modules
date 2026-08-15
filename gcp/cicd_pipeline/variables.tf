@@ -45,6 +45,11 @@ variable "binary_authorization_enforcement_mode" {
   }
 }
 
+variable "work_push_endpoint" {
+  type        = string
+  description = "The HTTPS URL on the GitHub App service that queued build submissions are pushed to. Webhook deliveries must be acknowledged within seconds, so the work they cause is queued rather than done in the delivery."
+}
+
 variable "npm_token_secret_id" {
   type        = string
   description = "The secret id of a Secret Manager secret holding a registry token for private npm packages, read by TypeScript unit builds. Empty disables private package access."

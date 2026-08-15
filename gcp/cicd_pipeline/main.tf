@@ -214,6 +214,50 @@ resource "google_pubsub_topic" "cloud_builds" {
   depends_on = [google_project_service.cicd["pubsub"]]
 }
 
+# Work queued by webhook deliveries. GitHub gives a delivery ten seconds, which
+# is not enough to stage a commit and start a build per unit, so the delivery
+# only enqueues; failures are retried by the subscription.
+resource "google_pubsub_topic" "work" {
+  project = var.project_id
+  name    = "cicd-work"
+
+  depends_on = [google_project_service.cicd["pubsub"]]
+}
+
+resource "google_pubsub_topic_iam_member" "github_app_work_publisher" {
+  project = var.project_id
+  topic   = google_pubsub_topic.work.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${var.github_app_service_account_email}"
+}
+
+resource "google_pubsub_subscription" "work" {
+  project = var.project_id
+  name    = "cicd-work"
+  topic   = google_pubsub_topic.work.id
+  # Staging a commit and starting a build per unit takes longer than the
+  # default deadline; redelivering while the work is in flight would duplicate
+  # check runs.
+  ack_deadline_seconds = 300
+
+  push_config {
+    push_endpoint = var.work_push_endpoint
+
+    oidc_token {
+      service_account_email = google_service_account.build_event_pusher.email
+      audience              = var.work_push_endpoint
+    }
+  }
+
+  retry_policy {
+    minimum_backoff = "10s"
+  }
+
+  expiration_policy {
+    ttl = ""
+  }
+}
+
 resource "google_service_account" "build_event_pusher" {
   project      = var.project_id
   account_id   = "cicd-build-event-pusher"
