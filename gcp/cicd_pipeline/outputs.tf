@@ -18,6 +18,11 @@ output "signing_key_version_id" {
   description = "The KMS key version used for image signing and attestations, in projects/... form."
 }
 
+output "npm_token_secret_version_name" {
+  value       = var.npm_token_secret_id != "" ? "${data.google_secret_manager_secret.npm_token[0].name}/versions/latest" : ""
+  description = "The Secret Manager version resource name TypeScript unit builds read their registry token from; empty when no secret is configured."
+}
+
 output "attestor_id" {
   value       = google_binary_authorization_attestor.built_by_pipeline.id
   description = "The fully-qualified name of the Binary Authorization attestor."

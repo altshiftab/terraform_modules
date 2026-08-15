@@ -94,6 +94,24 @@ resource "google_storage_bucket_iam_member" "builder_bucket_object_admin" {
   member = "serviceAccount:${google_service_account.builder.email}"
 }
 
+# Private npm packages are read from the registry with a token the build reads
+# itself, so that it never passes through the orchestrating service.
+data "google_secret_manager_secret" "npm_token" {
+  count = var.npm_token_secret_id != "" ? 1 : 0
+
+  project   = var.project_id
+  secret_id = var.npm_token_secret_id
+}
+
+resource "google_secret_manager_secret_iam_member" "builder_npm_token" {
+  count = var.npm_token_secret_id != "" ? 1 : 0
+
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.npm_token[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.builder.email}"
+}
+
 # Image signing.
 
 # NOTE: Key ring names are permanently reserved within a project and location;

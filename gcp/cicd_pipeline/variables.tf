@@ -45,6 +45,12 @@ variable "binary_authorization_enforcement_mode" {
   }
 }
 
+variable "npm_token_secret_id" {
+  type        = string
+  description = "The secret id of a Secret Manager secret holding a registry token for private npm packages, read by TypeScript unit builds. Empty disables private package access."
+  default     = ""
+}
+
 variable "enable_vulnerability_scanning" {
   type        = bool
   description = "Whether to enable automatic vulnerability scanning of pushed images (billed per scanned image)."
