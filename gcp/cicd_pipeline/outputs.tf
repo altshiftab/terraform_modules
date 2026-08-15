@@ -13,6 +13,11 @@ output "bucket_name" {
   description = "The name of the bucket holding build sources (source/), caches (cache/) and reports (report/)."
 }
 
+output "build_location" {
+  value       = google_storage_bucket.cicd.location
+  description = "The location builds must be created in. Builds read and write the bucket throughout — sources, caches and reports — and transfers between regions are both charged and slow, so builds belong in the bucket's region."
+}
+
 output "signing_key_version_id" {
   value       = local.signing_key_version_id
   description = "The KMS key version used for image signing and attestations, in projects/... form."
