@@ -144,11 +144,11 @@ data "google_kms_crypto_key_version" "image_signing" {
   crypto_key = google_kms_crypto_key.image_signing.id
 }
 
-resource "google_kms_crypto_key_iam_member" "builder_signer" {
-  crypto_key_id = google_kms_crypto_key.image_signing.id
-  role          = "roles/cloudkms.signerVerifier"
-  member        = "serviceAccount:${google_service_account.builder.email}"
-}
+# NOTE: The builder deliberately holds no signing or attestation rights. Builds
+# execute code from the repositories they build, so a compromised dependency
+# would inherit whatever the builder can do. Signing, attesting and deploying
+# belong to a separate identity, driven by a build that only handles an image
+# digest and never runs repository code.
 
 # Binary Authorization.
 
@@ -165,14 +165,6 @@ resource "google_container_analysis_note" "built_by_pipeline" {
   depends_on = [google_project_service.cicd["containeranalysis"]]
 }
 
-# Attaching an attestation occurrence to the note is what the notes.attacher
-# role on the note grants.
-resource "google_container_analysis_note_iam_member" "builder_note_attacher" {
-  project = var.project_id
-  note    = google_container_analysis_note.built_by_pipeline.name
-  role    = "roles/containeranalysis.notes.attacher"
-  member  = "serviceAccount:${google_service_account.builder.email}"
-}
 
 resource "google_binary_authorization_attestor" "built_by_pipeline" {
   project = var.project_id
@@ -196,12 +188,6 @@ resource "google_binary_authorization_attestor" "built_by_pipeline" {
   depends_on = [google_project_service.cicd["binaryauthorization"]]
 }
 
-resource "google_binary_authorization_attestor_iam_member" "builder_attestor_viewer" {
-  project  = var.project_id
-  attestor = google_binary_authorization_attestor.built_by_pipeline.name
-  role     = "roles/binaryauthorization.attestorsViewer"
-  member   = "serviceAccount:${google_service_account.builder.email}"
-}
 
 # The project-wide admission policy: Cloud Run only admits images attested by
 # the pipeline. Google-maintained system images are exempted via the global
