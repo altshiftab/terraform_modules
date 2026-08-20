@@ -32,8 +32,7 @@ resource "google_cloud_run_v2_service" "service" {
   project  = var.project_id
   name     = var.name
   location = var.region
-  // Block external requests to the default `.run.app` address.
-  ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  ingress  = var.ingress
 
   lifecycle {
     # Owned by out-of-band gcloud/CI deploys, not Terraform: a deploy stamps

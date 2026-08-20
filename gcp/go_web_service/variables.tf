@@ -57,6 +57,28 @@ variable "iap_oauth_client_secret" {
   default = ""
 }
 
+variable "ingress" {
+  type        = string
+  description = "Who may reach the service directly."
+  default     = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+
+  # The default blocks external requests to the `.run.app` address, so the load
+  # balancer is the only way in and everything it does on the way past -- header
+  # stripping, Cloud Armor, IAP -- cannot be walked around.
+  #
+  # Firebase Hosting cannot use that: it reaches the service over the public
+  # run.app URL, so fronting a service with gcp/firebase_hosting means
+  # "INGRESS_TRAFFIC_ALL" and accepting that the address answers to anyone the
+  # service itself does not turn away.
+  validation {
+    condition = contains(
+      ["INGRESS_TRAFFIC_ALL", "INGRESS_TRAFFIC_INTERNAL_ONLY", "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"],
+      var.ingress,
+    )
+    error_message = "ingress must be one of INGRESS_TRAFFIC_ALL, INGRESS_TRAFFIC_INTERNAL_ONLY or INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER."
+  }
+}
+
 variable "use_http2" {
   type    = bool
   default = true
