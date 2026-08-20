@@ -76,6 +76,27 @@ variable "ip_addresses" {
     default = ["199.36.158.100"]
 }
 
+variable "ipv6_addresses" {
+    type = list(string)
+    description = "Addresses to publish AAAA records at, or none. Firebase documents no IPv6 support and its own setup asks for AAAA records to be removed; this exists for a caller who has decided to serve over IPv6 anyway, and it is empty unless one has."
+    default = []
+
+    # The address that works is 2620:0:890::100, and it is not in Firebase's
+    # documentation, not in its setup, and not something Google has undertaken
+    # to keep. What that costs if it changes is quiet: dual-stack clients prefer
+    # IPv6, so they would fail while every check made over IPv4 goes on passing.
+    #
+    # It costs something else too, learned the hard way. Hosting resolves the
+    # domain when it checks the ACME challenge over HTTP, and it follows AAAA.
+    # An AAAA pointing anywhere but Firebase fails that check, and a failed
+    # check is a certificate that does not issue -- and later, one that does not
+    # renew.
+    validation {
+        condition     = alltrue([for address in var.ipv6_addresses : strcontains(address, ":")])
+        error_message = "ipv6_addresses must be IPv6 addresses. An address without a colon is not one, and an AAAA record holding it resolves nowhere -- which fails the certificate check rather than merely serving nothing."
+    }
+}
+
 variable "wait_dns_verification" {
     type = bool
     description = "Whether an apply should block until each domain's DNS records verify. Leave false on the apply that creates the domains: the records to publish are an output of those same resources."

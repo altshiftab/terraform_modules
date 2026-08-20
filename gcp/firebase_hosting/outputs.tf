@@ -51,15 +51,17 @@ output "required_dns_records" {
 # `data` is unquoted. Cloud DNS wants a TXT value quoted in its rrdatas, the way
 # the caller already quotes its SPF and DMARC records.
 #
-# No AAAA is emitted, and that is not an oversight: Firebase serves a custom
-# domain over IPv4 only, and its own setup asks for existing AAAA records to be
-# removed. A dual-stack name loses IPv6 in the move.
+# AAAA records are emitted only for a caller that set ipv6_addresses. Firebase
+# documents no IPv6 support and asks for AAAA records to be removed, so a name
+# left to the default loses IPv6 in the move; see that variable for what opting
+# back in rests on.
 output "dns_records" {
     description = "The DNS records each domain needs, derived from configuration and known at plan time. TXT values are unquoted."
     value = {
         for domain, entry in local.hostname_entries :
         domain => concat(
             [for address in var.ip_addresses : { type = "A", data = address }],
+            [for address in var.ipv6_addresses : { type = "AAAA", data = address }],
             [{ type = "TXT", data = "hosting-site=${local.site_ids[entry.site_key]}" }],
         )
     }
