@@ -49,3 +49,29 @@ output "npm_publish_token_secret_version_name" {
   value       = var.npm_publish_token_secret_id != "" ? "${data.google_secret_manager_secret.npm_publish_token[0].name}/versions/latest" : ""
   description = "The Secret Manager version resource name publish builds read their registry token from."
 }
+
+output "imager_service_account_email" {
+  value       = google_service_account.imager.email
+  description = "The email of the service account image builds run as. It can write nothing but the pipeline's own bucket, because it runs the repository's Dockerfile."
+}
+
+output "image_publisher_service_account_email" {
+  value       = google_service_account.image_publisher.email
+  description = "The email of the service account image publish builds run as. It pushes, signs and attests, and runs nothing the repository wrote."
+}
+
+
+output "images_repository" {
+  value       = "${var.images_repository_location}-docker.pkg.dev/${var.project_id}/${var.images_repository_id}"
+  description = "The registry prefix pipeline-built images are pushed under."
+}
+
+output "attestor_name" {
+  value       = google_binary_authorization_attestor.built_by_pipeline.name
+  description = "The short name of the Binary Authorization attestor, which publish builds read to learn the public key id their attestation must name."
+}
+
+output "note_name" {
+  value       = google_container_analysis_note.built_by_pipeline.name
+  description = "The short name of the Container Analysis note attestations are attached to."
+}

@@ -381,3 +381,120 @@ resource "google_storage_bucket_iam_member" "github_app_bucket_object_admin" {
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${var.github_app_service_account_email}"
 }
+
+
+# Images.
+#
+# A Dockerfile is the repository's own code, and building one needs the network:
+# base images are pulled and dependencies fetched. A build that runs that code
+# must therefore hold nothing that can write. Cloud Build reaches the metadata
+# server, so a poisoned dependency that runs during `go mod download` could take
+# the build's own token and sign whatever image it liked — which is precisely
+# what the attestation exists to prevent.
+#
+# So an image is built by one identity and published by another. What passes
+# between them is a tarball in the bucket: opaque to the build that wrote it,
+# and the only thing the publisher ever handles.
+resource "google_service_account" "imager" {
+  project      = var.project_id
+  account_id   = "cicd-imager"
+  display_name = "CI/CD image builder"
+}
+
+resource "google_project_iam_member" "imager_log_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.imager.email}"
+}
+
+# The bucket is where the source arrives and where the built tarball is left.
+# Note that this is the identity's only write, and it reaches nothing outside
+# the pipeline's own scratch space.
+resource "google_storage_bucket_iam_member" "imager_bucket_object_admin" {
+  bucket = google_storage_bucket.cicd.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.imager.email}"
+}
+
+# Nothing here grants the image build a secret. Fetching private modules while
+# the image is built is done with a GitHub App installation token, minted per
+# build by the service and staged in the bucket: it is scoped to the
+# repositories the app is installed on and expires within the hour. A long-lived
+# token in Secret Manager would put every private repository inside the blast
+# radius of anything a Dockerfile runs.
+
+resource "google_service_account_iam_member" "github_app_act_as_imager" {
+  service_account_id = google_service_account.imager.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${var.github_app_service_account_email}"
+}
+
+
+# Publishing an image: loading the tarball, pushing it, signing the digest and
+# recording the attestation that admits it. Nothing in this build runs anything
+# the repository wrote, which is what lets it hold the signing key.
+resource "google_service_account" "image_publisher" {
+  project      = var.project_id
+  account_id   = "cicd-image-publisher"
+  display_name = "CI/CD image publisher"
+}
+
+resource "google_project_iam_member" "image_publisher_log_writer" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.image_publisher.email}"
+}
+
+resource "google_storage_bucket_iam_member" "image_publisher_bucket_object_admin" {
+  bucket = google_storage_bucket.cicd.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.image_publisher.email}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "image_publisher_images_writer" {
+  project    = var.project_id
+  location   = var.images_repository_location
+  repository = var.images_repository_id
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${google_service_account.image_publisher.email}"
+}
+
+# Signing. The key never leaves KMS: the publisher sends it a digest and reads
+# back a signature, and holds no ability to read, export or destroy the key.
+resource "google_kms_crypto_key_iam_member" "image_publisher_signer" {
+  crypto_key_id = google_kms_crypto_key.image_signing.id
+  role          = "roles/cloudkms.signerVerifier"
+  member        = "serviceAccount:${google_service_account.image_publisher.email}"
+}
+
+# Recording the attestation takes two permissions in two places: attaching an
+# occurrence to the note, and creating occurrences in the project they live in.
+# Neither is implied by the other.
+resource "google_container_analysis_note_iam_member" "image_publisher_attacher" {
+  project = var.project_id
+  note    = google_container_analysis_note.built_by_pipeline.name
+  role    = "roles/containeranalysis.notes.attacher"
+  member  = "serviceAccount:${google_service_account.image_publisher.email}"
+}
+
+resource "google_project_iam_member" "image_publisher_occurrence_editor" {
+  project = var.project_id
+  role    = "roles/containeranalysis.occurrences.editor"
+  member  = "serviceAccount:${google_service_account.image_publisher.email}"
+}
+
+# The attestation names the public key it was made with, and the id the attestor
+# matches against is the attestor's to state rather than the build's to guess.
+# The build reads it instead of constructing it.
+resource "google_binary_authorization_attestor_iam_member" "image_publisher_viewer" {
+  project  = var.project_id
+  attestor = google_binary_authorization_attestor.built_by_pipeline.name
+  role     = "roles/binaryauthorization.attestorsViewer"
+  member   = "serviceAccount:${google_service_account.image_publisher.email}"
+}
+
+resource "google_service_account_iam_member" "github_app_act_as_image_publisher" {
+  service_account_id = google_service_account.image_publisher.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${var.github_app_service_account_email}"
+}
