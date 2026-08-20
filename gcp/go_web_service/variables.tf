@@ -1,6 +1,21 @@
 variable "name" {
   type        = string
-  description = "The name of the service."
+  description = "The name of the service. Also the stem of the service account this module creates, which is what bounds its length."
+
+  validation {
+    # What Cloud Run will accept as a service name.
+    condition     = can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", var.name)) && length(var.name) <= 63
+    error_message = "name must be a lowercase Cloud Run service name -- letters, digits and inner hyphens, starting with a letter -- of at most 63 characters."
+  }
+
+  validation {
+    # The service account is "<name>-sa" and GCP caps an account id at 30
+    # characters, so the name has 27. Checked here because the failure is
+    # otherwise an error about an account id the caller never wrote, raised
+    # after everything else in the plan has already been worked out.
+    condition     = var.existing_service_account_email != "" || (length(var.name) >= 3 && length(var.name) <= 27)
+    error_message = "name must be 3-27 characters when this module creates the service account, since the account id is \"<name>-sa\" and GCP caps that at 30. Pass existing_service_account_email to use a longer name."
+  }
 }
 
 variable "project_id" {
