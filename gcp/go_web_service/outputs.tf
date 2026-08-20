@@ -4,8 +4,8 @@ output "service" {
 }
 
 output "backend_service" {
-  value       = google_compute_backend_service.backend_service
-  description = "The backend service."
+  value       = var.create_backend_service ? google_compute_backend_service.backend_service[0] : null
+  description = "The backend service, if one was created."
 }
 
 output "domain_names" {

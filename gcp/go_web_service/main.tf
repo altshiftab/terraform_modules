@@ -97,7 +97,7 @@ resource "google_cloud_run_v2_service" "service" {
         for_each = !var.public ? [1] : []
         content {
           name  = "IAP_JWT_AUDIENCE"
-          value = "/projects/${data.google_project.project[0].number}/global/backendServices/${google_compute_backend_service.backend_service.generated_id}"
+          value = "/projects/${data.google_project.project[0].number}/global/backendServices/${google_compute_backend_service.backend_service[0].generated_id}"
         }
       }
 
@@ -144,6 +144,7 @@ resource "google_cloud_run_v2_service" "service" {
 }
 
 resource "google_compute_region_network_endpoint_group" "network_endpoint_group" {
+  count                 = var.create_backend_service ? 1 : 0
   project               = var.project_id
   region                = var.region
   name                  = "${var.name}-network-endpoint-group"
@@ -155,6 +156,7 @@ resource "google_compute_region_network_endpoint_group" "network_endpoint_group"
 }
 
 resource "google_compute_backend_service" "backend_service" {
+  count                 = var.create_backend_service ? 1 : 0
   project               = var.project_id
   name                  = "${var.name}-backend-service"
   protocol              = var.use_http2 ? "HTTP2" : "HTTP"
@@ -167,7 +169,7 @@ resource "google_compute_backend_service" "backend_service" {
   # minutes, fixed. The wait that is worth setting is the service's own, below.
 
   backend {
-    group = google_compute_region_network_endpoint_group.network_endpoint_group.self_link
+    group = google_compute_region_network_endpoint_group.network_endpoint_group[0].self_link
   }
 
   iap {
@@ -226,7 +228,7 @@ resource "google_cloud_run_service_iam_binding" "binding" {
 resource "google_iap_web_backend_service_iam_binding" "iap_enable" {
   count               = !var.public ? 1 : 0
   project             = var.project_id
-  web_backend_service = google_compute_backend_service.backend_service.name
+  web_backend_service = google_compute_backend_service.backend_service[0].name
   role                = "roles/iap.httpsResourceAccessor"
   members             = var.members
 
@@ -235,7 +237,7 @@ resource "google_iap_web_backend_service_iam_binding" "iap_enable" {
 
 resource "google_iap_settings" "iap_settings" {
   count = !var.public ? 1 : 0
-  name  = "projects/${data.google_project.project[0].number}/iap_web/compute/services/${google_compute_backend_service.backend_service.name}"
+  name  = "projects/${data.google_project.project[0].number}/iap_web/compute/services/${google_compute_backend_service.backend_service[0].name}"
 
   access_settings {
     cors_settings {

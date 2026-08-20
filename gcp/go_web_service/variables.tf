@@ -56,6 +56,22 @@ variable "public" {
   default     = false
 }
 
+# The backend service and its network endpoint group exist to be pointed at: by
+# a load balancer's url map, or by IAP, which is configured on the backend
+# service itself. A service fronted by Firebase Hosting is reached over its
+# run.app address instead, and needs neither -- they then sit there attached to
+# nothing, which is not free of cost so much as free of purpose.
+variable "create_backend_service" {
+  type        = bool
+  description = "Whether to create the backend service and the network endpoint group behind it. Needed by a load balancer that routes to this service, and by IAP; not by a service fronted by Firebase Hosting."
+  default     = true
+
+  validation {
+    condition     = var.create_backend_service || var.public
+    error_message = "create_backend_service cannot be false while public is false: IAP is configured on the backend service, so a service gated by it has to have one."
+  }
+}
+
 variable "members" {
   type        = list(string)
   description = "The members with access to the service. Only used when public is false."
