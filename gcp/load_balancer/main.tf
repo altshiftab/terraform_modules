@@ -212,6 +212,12 @@ resource "google_compute_global_address" "ipv6_address" {
     depends_on = [google_project_service.compute]
 }
 
+module "expanded_ipv6_addresses" {
+    source = "../expanded_ipv6_addresses"
+
+    addresses = [google_compute_global_address.ipv6_address.address]
+}
+
 // Forwarding rules
 
 resource "google_compute_global_forwarding_rule" "global_forwarding_rule_ipv4_https" {
