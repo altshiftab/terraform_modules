@@ -131,6 +131,12 @@ variable "security_policy_id" {
 }
 variable "request_timeout_seconds" {
   type        = number
-  description = "How long the load balancer waits for a response. The default matches Cloud Run's own request timeout."
+  description = "How long the service may take over a request before it is cut off. Applied to the service itself: a load balancer fronting a serverless NEG cannot be given a timeout, and refuses one rather than ignoring it. Null leaves the service's own default, which is this same 300 seconds."
   default     = 300
+
+  validation {
+    # Cloud Run's ceiling. Asked for more, the API refuses the whole service.
+    condition     = var.request_timeout_seconds == null || (var.request_timeout_seconds > 0 && var.request_timeout_seconds <= 3600)
+    error_message = "request_timeout_seconds must be between 1 and 3600, the longest a Cloud Run request may take."
+  }
 }

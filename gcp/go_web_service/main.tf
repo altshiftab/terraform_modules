@@ -51,6 +51,11 @@ resource "google_cloud_run_v2_service" "service" {
 
     execution_environment = var.execution_environment != "" ? var.execution_environment : null
 
+    # How long a request may take. This is the one that has effect: the load
+    # balancer in front cannot be given a timeout for a serverless NEG, so what
+    # ends a long request is the service refusing to run it any longer.
+    timeout = var.request_timeout_seconds != null ? "${var.request_timeout_seconds}s" : null
+
     dynamic "vpc_access" {
       for_each = length(var.network_interfaces) == 0 && var.firewall_config == null ? [] : [1]
       content {
@@ -155,9 +160,11 @@ resource "google_compute_backend_service" "backend_service" {
   protocol              = var.use_http2 ? "HTTP2" : "HTTP"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   security_policy       = var.security_policy_id
-  # The default is 30 seconds, which cuts off requests that legitimately take
-  # longer than a page load — a queued job pushed to an endpoint, say.
-  timeout_sec = var.request_timeout_seconds
+  # No timeout_sec. The API refuses one on a backend service fronting a
+  # serverless NEG, which is the only kind this module makes, and the refusal is
+  # fatal rather than ignored: setting it fails the create. What it would have
+  # configured is not configurable either -- a serverless NEG backend waits 60
+  # minutes, fixed. The wait that is worth setting is the service's own, below.
 
   backend {
     group = google_compute_region_network_endpoint_group.network_endpoint_group.self_link
