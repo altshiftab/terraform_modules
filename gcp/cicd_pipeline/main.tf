@@ -50,13 +50,25 @@ resource "google_artifact_registry_repository_iam_member" "builder_images_writer
 
 # Build sources, Go build/test and lint caches, and test/lint reports, separated
 # by prefix. What is kept is decided by what is worth having rather than by what
-# it costs: the whole bucket is well under a gibibyte, at $0.023 a gibibyte-month.
+# it costs: what the prefixes hold is a couple of gibibytes, at $0.023 a
+# gibibyte-month.
 resource "google_storage_bucket" "cicd" {
   project                     = var.project_id
   name                        = "${var.project_id}-cicd"
   location                    = var.region
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
+
+  # Every build overwrites the caches it reuses and writes a source archive that
+  # the rules below later delete, and each of those deletions would otherwise be
+  # retained -- and charged for -- a further seven days, that being the shortest
+  # retention the policy allows short of none at all. Against a bucket written
+  # once per build the copies so retained outweigh the live objects by an order
+  # of magnitude, and not one of them is worth recovering: what a build reads is
+  # reproducible from the commit that produced it.
+  soft_delete_policy {
+    retention_duration_seconds = 0
+  }
 
   lifecycle_rule {
     condition {
