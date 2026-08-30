@@ -89,3 +89,32 @@ variable "npm_publish_token_secret_id" {
   description = "The secret id of a Secret Manager secret holding a registry token that may publish. Only the publisher reads it; empty disables publishing packages."
   default     = ""
 }
+
+variable "terraform_state_bucket" {
+  type        = string
+  description = "The bucket holding the Terraform state that plan builds read. Empty creates no planning identity, and a repository asking to be planned is told the deployment cannot."
+  default     = ""
+}
+
+# A plan is not a report. It is applied, so it is only useful while the state it
+# was made against has not moved, and it holds the resource attributes the
+# configuration sets — secrets among them, in the same way the state does. Both
+# of those argue for keeping it briefly: an approved plan that has gone stale
+# should be planned again rather than found.
+variable "plan_retention_days" {
+  type        = number
+  description = "How long a saved Terraform plan is kept. A pull request left open longer than this is planned again before it can be applied."
+  default     = 30
+}
+
+variable "terraform_registry_token_secret_id" {
+  type        = string
+  description = "The secret id of a Secret Manager secret holding a token for a private Terraform provider registry, read by the plan build itself. Empty leaves the public registry, which needs no credentials."
+  default     = ""
+}
+
+variable "terraform_plan_impersonated_service_accounts" {
+  type        = set(string)
+  description = "Service account emails a Terraform plan may mint tokens for, which a provider authenticating through domain-wide delegation needs. Name the read-only delegate here, never the writing one: a plan that can impersonate an identity inherits everything that identity may do."
+  default     = []
+}

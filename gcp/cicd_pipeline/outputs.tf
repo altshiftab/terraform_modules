@@ -75,3 +75,13 @@ output "note_name" {
   value       = google_container_analysis_note.built_by_pipeline.name
   description = "The short name of the Container Analysis note attestations are attached to."
 }
+
+output "terraform_plan_service_account_email" {
+  value       = var.terraform_state_bucket != "" ? google_service_account.terraform_planner[0].email : ""
+  description = "The email of the read-only identity Terraform plan builds run as. Empty when no state bucket was given, which is what makes a repository's Terraform unit report that this deployment cannot plan it."
+}
+
+output "terraform_registry_token_secret_version_name" {
+  value       = var.terraform_registry_token_secret_id != "" ? "${data.google_secret_manager_secret.terraform_registry_token[0].id}/versions/latest" : ""
+  description = "The Secret Manager version resource name of the private Terraform registry token, read by plan builds."
+}

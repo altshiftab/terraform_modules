@@ -99,6 +99,16 @@ resource "google_storage_bucket" "cicd" {
       type = "Delete"
     }
   }
+
+  lifecycle_rule {
+    condition {
+      age            = var.plan_retention_days
+      matches_prefix = ["plan/"]
+    }
+    action {
+      type = "Delete"
+    }
+  }
 }
 
 resource "google_storage_bucket_iam_member" "builder_bucket_object_admin" {
@@ -392,6 +402,107 @@ resource "google_storage_bucket_iam_member" "github_app_bucket_object_admin" {
   bucket = google_storage_bucket.cicd.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${var.github_app_service_account_email}"
+}
+
+# Terraform planning.
+#
+# A plan is the one phase of the pipeline that runs with both a network and the
+# build's credentials, and it cannot be otherwise: reading what a configuration
+# would change is a conversation with the APIs holding it, so the container with
+# no route out that every other kind's code runs in would have nothing to say.
+# Provider binaries are third-party code executing in that position.
+#
+# What bounds it is therefore the identity rather than the sandbox, and this one
+# may only read. It is deliberately not the builder: that identity writes to the
+# image repository and can deploy services, which is a great deal to hand a
+# provider plugin. Applying is a separate identity again, and is not created
+# here.
+#
+# NOTE: read-only describes the infrastructure, not the secrets. Planning must
+# read Terraform state, and state holds resource attributes in the clear. A
+# hostile provider in a plan build can read them; what it cannot do is change
+# anything.
+resource "google_service_account" "terraform_planner" {
+  count = var.terraform_state_bucket != "" ? 1 : 0
+
+  project      = var.project_id
+  account_id   = "cicd-terraform-plan"
+  display_name = "CI/CD Terraform planner"
+}
+
+resource "google_project_iam_member" "terraform_planner_log_writer" {
+  count = var.terraform_state_bucket != "" ? 1 : 0
+
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.terraform_planner[0].email}"
+}
+
+resource "google_project_iam_member" "terraform_planner_viewer" {
+  count = var.terraform_state_bucket != "" ? 1 : 0
+
+  project = var.project_id
+  role    = "roles/viewer"
+  member  = "serviceAccount:${google_service_account.terraform_planner[0].email}"
+}
+
+# The GCS backend takes a lock before it reads, so planning writes to the state
+# bucket even though it changes no state.
+resource "google_storage_bucket_iam_member" "terraform_planner_state_object_admin" {
+  count = var.terraform_state_bucket != "" ? 1 : 0
+
+  bucket = var.terraform_state_bucket
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.terraform_planner[0].email}"
+}
+
+resource "google_storage_bucket_iam_member" "terraform_planner_bucket_object_admin" {
+  count = var.terraform_state_bucket != "" ? 1 : 0
+
+  bucket = google_storage_bucket.cicd.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.terraform_planner[0].email}"
+}
+
+resource "google_service_account_iam_member" "github_app_act_as_terraform_planner" {
+  count = var.terraform_state_bucket != "" ? 1 : 0
+
+  service_account_id = google_service_account.terraform_planner[0].name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${var.github_app_service_account_email}"
+}
+
+# A private provider registry, reached with a token the plan build reads itself
+# rather than one handed to it.
+data "google_secret_manager_secret" "terraform_registry_token" {
+  count = var.terraform_registry_token_secret_id != "" ? 1 : 0
+
+  project   = var.project_id
+  secret_id = var.terraform_registry_token_secret_id
+}
+
+resource "google_secret_manager_secret_iam_member" "terraform_planner_registry_token" {
+  count = var.terraform_state_bucket != "" && var.terraform_registry_token_secret_id != "" ? 1 : 0
+
+  project   = var.project_id
+  secret_id = data.google_secret_manager_secret.terraform_registry_token[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.terraform_planner[0].email}"
+}
+
+# A provider that authenticates through domain-wide delegation mints a token for
+# a delegate service account, so planning needs that right over each one it uses.
+#
+# This is the sharpest edge in the planning identity, because impersonation is
+# transitive: whatever the delegate may do, a plan may do. It is therefore for
+# the read-only delegate, and the module says so rather than leaving it to a
+# caller to notice.
+resource "google_service_account_iam_member" "terraform_planner_token_creator" {
+  for_each = var.terraform_state_bucket != "" ? var.terraform_plan_impersonated_service_accounts : []
+
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${each.value}"
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.terraform_planner[0].email}"
 }
 
 
