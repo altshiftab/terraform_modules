@@ -143,6 +143,20 @@ resource "google_cloud_run_v2_service" "service" {
   depends_on          = [google_project_service.compute, google_project_service.cloud_run]
 }
 
+# Both became counted when create_backend_service arrived. Without these, a caller moving past that
+# version has its backend service and endpoint group destroyed and made again -- a gap in routing
+# for every host the load balancer sends here -- and cannot say so itself, since a move into another
+# module package is refused.
+moved {
+  from = google_compute_region_network_endpoint_group.network_endpoint_group
+  to   = google_compute_region_network_endpoint_group.network_endpoint_group[0]
+}
+
+moved {
+  from = google_compute_backend_service.backend_service
+  to   = google_compute_backend_service.backend_service[0]
+}
+
 resource "google_compute_region_network_endpoint_group" "network_endpoint_group" {
   count                 = var.create_backend_service ? 1 : 0
   project               = var.project_id
