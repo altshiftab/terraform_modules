@@ -51,13 +51,19 @@ resource "google_compute_url_map" "url_map_https" {
     }
 
     // Map every set of host names to their corresponding backend service.
+    //
+    // A path matcher is named after the service it routes to -- its host names, as a certificate is
+    // -- rather than its place in the list. Named by place, a service added anywhere but at the end
+    // renamed every path matcher after it, and the plan showed every host rule behind it removed and
+    // added again; named by service, the rules of the others are what they were, and adding one
+    // shows as adding one.
 
     dynamic "host_rule" {
         for_each = var.services
 
         content {
             hosts = host_rule.value.domain_names
-            path_matcher = "${var.name}-url-map-https-path-matcher-${host_rule.key}"
+            path_matcher = local.path_matcher_names[host_rule.key]
         }
     }
 
@@ -65,7 +71,7 @@ resource "google_compute_url_map" "url_map_https" {
         for_each = var.services
 
         content {
-            name = "${var.name}-url-map-https-path-matcher-${path_matcher.key}"
+            name = local.path_matcher_names[path_matcher.key]
             route_rules {
                 priority = 100
                 match_rules {
@@ -97,6 +103,12 @@ resource "google_compute_url_map" "url_map_https" {
             default_service = path_matcher.value.backend
         }
     }
+}
+
+locals {
+    path_matcher_names = [
+        for s in var.services : "${var.name}-url-map-https-path-matcher-${substr(md5(join(",", sort(s.domain_names))), 0, 16)}"
+    ]
 }
 
 // SSL — Certificate Manager
