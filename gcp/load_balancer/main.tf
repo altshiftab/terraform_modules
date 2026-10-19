@@ -64,6 +64,11 @@ resource "google_compute_url_map" "url_map_https" {
         content {
             hosts = host_rule.value.domain_names
             path_matcher = local.path_matcher_names[host_rule.key]
+            // Said, though nothing is described: the API answers an unset description with an empty
+            // one, and a rule whose description is null in the configuration but empty in the state
+            // is a different member of the set -- so every rule showed as removed and added again,
+            // whatever had changed.
+            description = ""
         }
     }
 
