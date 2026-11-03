@@ -10,7 +10,7 @@ output "build_event_pusher_service_account_email" {
 
 output "bucket_name" {
   value       = google_storage_bucket.cicd.name
-  description = "The name of the bucket holding build sources (source/), caches (cache/) and reports (report/)."
+  description = "The name of the bucket holding build sources (source/ and generated/), caches (cache/<kind>/), image archives (image/), saved plans (plan/) and reports (report/)."
 }
 
 output "build_location" {

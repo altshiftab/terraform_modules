@@ -15,6 +15,41 @@ locals {
   )
 
   signing_key_version_id = "${google_kms_crypto_key.image_signing.id}/cryptoKeyVersions/1"
+
+  # An IAM condition names an object by its resource name, which is the bucket's
+  # followed by the object's own.
+  cicd_objects = "projects/_/buckets/${google_storage_bucket.cicd.name}/objects/"
+
+  # Everything in the bucket but the saved plans, which is what every build
+  # identity may read. A plan holds the resource attributes its configuration
+  # sets, secrets among them, exactly as the state does, and no build but a plan
+  # has any business with one. The condition is a negation rather than a list of
+  # prefixes because listing the bucket is asked of the bucket rather than of an
+  # object, and a positive prefix would refuse it.
+  cicd_readable = "!resource.name.startsWith(\"${local.cicd_objects}plan/\")"
+
+  # Where each build identity may write, by prefix. Every one of them runs code
+  # it did not write -- a dependency, a Dockerfile, a provider -- so what it may
+  # write is what a hostile build could leave for the next one to trust, and is
+  # kept to what its own builds produce.
+  #
+  # A prefix an identity only creates under holds objects named per build, which
+  # nothing ever has cause to replace; storage.objects.create without delete is
+  # what makes an existing object out of reach. Caches and reports are written
+  # over by design, and those are replaced.
+  cicd_prefixes = {
+    builder_creates            = ["generated/"]
+    builder_replaces           = ["cache/go/", "cache/typescript/", "cache/lint/", "report/"]
+    publisher_replaces         = ["cache/typescript/", "report/"]
+    terraform_planner_reads    = ["source/", "generated/"]
+    terraform_planner_replaces = ["cache/terraform/", "report/", "plan/"]
+    imager_creates             = ["image/"]
+  }
+
+  cicd_prefix_conditions = {
+    for name, prefixes in local.cicd_prefixes :
+    name => join(" || ", [for prefix in prefixes : "resource.name.startsWith(\"${local.cicd_objects}${prefix}\")"])
+  }
 }
 
 resource "google_project_service" "cicd" {
@@ -83,7 +118,7 @@ resource "google_storage_bucket" "cicd" {
   lifecycle_rule {
     condition {
       age            = var.source_retention_days
-      matches_prefix = ["source/"]
+      matches_prefix = ["source/", "generated/"]
     }
     action {
       type = "Delete"
@@ -111,10 +146,44 @@ resource "google_storage_bucket" "cicd" {
   }
 }
 
+resource "google_storage_bucket_iam_member" "builder_bucket_object_viewer" {
+  bucket = google_storage_bucket.cicd.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.builder.email}"
+
+  condition {
+    title      = "cicd-readable"
+    expression = local.cicd_readable
+  }
+}
+
+# The generated sources a repository's units, and its images, are built from.
+# Each is named after the run that generated it and pinned by generation where it
+# is read, so a builder that could replace one would be replacing something no
+# build is waiting for -- and could not, holding no delete.
+resource "google_storage_bucket_iam_member" "builder_bucket_object_creator" {
+  bucket = google_storage_bucket.cicd.name
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.builder.email}"
+
+  condition {
+    title      = "cicd-builder-creates"
+    expression = local.cicd_prefix_conditions.builder_creates
+  }
+}
+
+# The caches the builder's own kinds reuse, the linter every Go unit shares, and
+# the reports. The planner's cache is not among them: the builder has no reason
+# to touch what a plan restores.
 resource "google_storage_bucket_iam_member" "builder_bucket_object_admin" {
   bucket = google_storage_bucket.cicd.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.builder.email}"
+
+  condition {
+    title      = "cicd-builder-replaces"
+    expression = local.cicd_prefix_conditions.builder_replaces
+  }
 }
 
 # Private npm packages are read from the registry with a token the build reads
@@ -241,10 +310,26 @@ resource "google_project_iam_member" "publisher_log_writer" {
   member  = "serviceAccount:${google_service_account.publisher.email}"
 }
 
+resource "google_storage_bucket_iam_member" "publisher_bucket_object_viewer" {
+  bucket = google_storage_bucket.cicd.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.publisher.email}"
+
+  condition {
+    title      = "cicd-readable"
+    expression = local.cicd_readable
+  }
+}
+
 resource "google_storage_bucket_iam_member" "publisher_bucket_object_admin" {
   bucket = google_storage_bucket.cicd.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.publisher.email}"
+
+  condition {
+    title      = "cicd-publisher-replaces"
+    expression = local.cicd_prefix_conditions.publisher_replaces
+  }
 }
 
 data "google_secret_manager_secret" "npm_publish_token" {
@@ -398,6 +483,8 @@ resource "google_service_account_iam_member" "github_app_act_as_builder" {
   member             = "serviceAccount:${var.github_app_service_account_email}"
 }
 
+# The service stages what every build reads, and is the one identity that runs
+# nothing a repository wrote, so it alone keeps the whole bucket.
 resource "google_storage_bucket_iam_member" "github_app_bucket_object_admin" {
   bucket = google_storage_bucket.cicd.name
   role   = "roles/storage.objectAdmin"
@@ -456,12 +543,39 @@ resource "google_storage_bucket_iam_member" "terraform_planner_state_object_admi
   member = "serviceAccount:${google_service_account.terraform_planner[0].email}"
 }
 
+# The planner reads the sources it plans and nothing else of the other builds':
+# a provider runs here with the network and the build's credentials, and the
+# caches and archives the other identities produce are no business of a plan's.
+# Generated sources are among what it reads, since a repository that generates
+# them builds every unit from them, its Terraform ones included.
+resource "google_storage_bucket_iam_member" "terraform_planner_bucket_object_viewer" {
+  count = var.terraform_state_bucket != "" ? 1 : 0
+
+  bucket = google_storage_bucket.cicd.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.terraform_planner[0].email}"
+
+  condition {
+    title      = "cicd-terraform-planner-reads"
+    expression = local.cicd_prefix_conditions.terraform_planner_reads
+  }
+}
+
+# Its own cache, the reports, and the saved plans. It once held the whole bucket,
+# which made it a third writer of what the generate build restores before it
+# compiles -- and so, by way of the generated sources, of what images are built
+# from.
 resource "google_storage_bucket_iam_member" "terraform_planner_bucket_object_admin" {
   count = var.terraform_state_bucket != "" ? 1 : 0
 
   bucket = google_storage_bucket.cicd.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.terraform_planner[0].email}"
+
+  condition {
+    title      = "cicd-terraform-planner-replaces"
+    expression = local.cicd_prefix_conditions.terraform_planner_replaces
+  }
 }
 
 resource "google_service_account_iam_member" "github_app_act_as_terraform_planner" {
@@ -517,7 +631,10 @@ resource "google_service_account_iam_member" "terraform_planner_token_creator" {
 #
 # So an image is built by one identity and published by another. What passes
 # between them is a tarball in the bucket: opaque to the build that wrote it,
-# and the only thing the publisher ever handles.
+# and the only thing the publisher ever handles. The imager may create the
+# tarball and never replace it, and the publisher loads it only once its hash
+# matches the one the image build reported to Cloud Build -- so what is pushed is
+# what that build produced, whoever else could write to the bucket meanwhile.
 resource "google_service_account" "imager" {
   project      = var.project_id
   account_id   = "cicd-imager"
@@ -531,12 +648,32 @@ resource "google_project_iam_member" "imager_log_writer" {
 }
 
 # The bucket is where the source arrives and where the built tarball is left.
-# Note that this is the identity's only write, and it reaches nothing outside
-# the pipeline's own scratch space.
-resource "google_storage_bucket_iam_member" "imager_bucket_object_admin" {
+resource "google_storage_bucket_iam_member" "imager_bucket_object_viewer" {
   bucket = google_storage_bucket.cicd.name
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.imager.email}"
+
+  condition {
+    title      = "cicd-readable"
+    expression = local.cicd_readable
+  }
+}
+
+# Leaving the tarball is the identity's only write. It may create one under
+# image/ and replace nothing, there or anywhere: each tarball is named after the
+# build that made it, so no image build has cause to write over another's, and
+# one that tried -- a Dockerfile that took the build's token -- holds no delete
+# to do it with. A name taken in advance costs that one build its image, which
+# is a failure, not a forgery.
+resource "google_storage_bucket_iam_member" "imager_bucket_object_creator" {
+  bucket = google_storage_bucket.cicd.name
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.imager.email}"
+
+  condition {
+    title      = "cicd-imager-creates"
+    expression = local.cicd_prefix_conditions.imager_creates
+  }
 }
 
 # Nothing here grants the image build a secret. Fetching private modules while
@@ -568,10 +705,16 @@ resource "google_project_iam_member" "image_publisher_log_writer" {
   member  = "serviceAccount:${google_service_account.image_publisher.email}"
 }
 
-resource "google_storage_bucket_iam_member" "image_publisher_bucket_object_admin" {
+# The publisher reads the tarball and writes nothing to the bucket at all.
+resource "google_storage_bucket_iam_member" "image_publisher_bucket_object_viewer" {
   bucket = google_storage_bucket.cicd.name
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.image_publisher.email}"
+
+  condition {
+    title      = "cicd-readable"
+    expression = local.cicd_readable
+  }
 }
 
 resource "google_artifact_registry_repository_iam_member" "image_publisher_images_writer" {
