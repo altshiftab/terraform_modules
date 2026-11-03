@@ -115,10 +115,15 @@ resource "google_storage_bucket" "cicd" {
     }
   }
 
+  # The sources builds run on and the image archives they hand between the two
+  # image builds are build inputs, reproducible from the commit, and named per
+  # run or per build so that nothing overwrites them -- so nothing deletes them
+  # either, and without a rule they would accumulate. image/ holds the tarballs
+  # and the short-lived installation tokens the image builds read.
   lifecycle_rule {
     condition {
       age            = var.source_retention_days
-      matches_prefix = ["source/", "generated/"]
+      matches_prefix = ["source/", "generated/", "image/"]
     }
     action {
       type = "Delete"
