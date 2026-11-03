@@ -171,3 +171,9 @@ variable "request_timeout_seconds" {
     error_message = "request_timeout_seconds must be between 1 and 3600, the longest a Cloud Run request may take."
   }
 }
+
+variable "binary_authorization" {
+  type        = bool
+  description = "Whether the service is enrolled in the project's Binary Authorization policy. What enrolment means is the policy's to decide: under a dry-run policy every deploy is admitted and the ones that would have been refused are logged, and under an enforced one they are refused."
+  default     = true
+}

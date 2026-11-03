@@ -44,6 +44,17 @@ resource "google_cloud_run_v2_service" "service" {
     ]
   }
 
+  # Enrolment in the project's admission policy. It changes nothing on its own: a
+  # policy in dry run admits everything and logs what it would have refused, which
+  # is what tells a service that has only ever been deployed by hand from one that
+  # runs what the pipeline built, before the policy is made to refuse.
+  dynamic "binary_authorization" {
+    for_each = var.binary_authorization ? [1] : []
+    content {
+      use_default = true
+    }
+  }
+
   template {
     service_account = var.existing_service_account_email != "" ? var.existing_service_account_email : google_service_account.service_account[0].email
     // The maximum number. Go services should be able to handle a lot of concurrent requests.
