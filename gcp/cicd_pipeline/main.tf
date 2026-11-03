@@ -491,6 +491,26 @@ resource "google_storage_bucket_iam_member" "github_app_bucket_object_admin" {
   member = "serviceAccount:${var.github_app_service_account_email}"
 }
 
+# Provenance. Once an image is published, the service states how it was built
+# -- from which commit, by which builds, from which sources -- signs that with
+# the image signing key, and attaches it to the image as an OCI referrer. It is
+# the service that does so rather than a build because the statement is composed
+# from Cloud Build's own records of the builds, which no build step can reach,
+# and that is what makes it worth signing.
+resource "google_kms_crypto_key_iam_member" "github_app_signer" {
+  crypto_key_id = google_kms_crypto_key.image_signing.id
+  role          = "roles/cloudkms.signerVerifier"
+  member        = "serviceAccount:${var.github_app_service_account_email}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "github_app_images_writer" {
+  project    = var.project_id
+  location   = var.images_repository_location
+  repository = var.images_repository_id
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${var.github_app_service_account_email}"
+}
+
 # Terraform planning.
 #
 # A plan is the one phase of the pipeline that runs with both a network and the
