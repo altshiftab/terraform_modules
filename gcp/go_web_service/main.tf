@@ -94,6 +94,13 @@ resource "google_cloud_run_v2_service" "service" {
         # Omitting this leaves CPU always-allocated (instance-based billing).
         cpu_idle          = true
         startup_cpu_boost = true
+
+        # Both, as the limits are one map: declaring the memory alone would leave the CPU to be
+        # filled in by the API, and the next plan to propose taking it away again.
+        limits = {
+          cpu    = var.cpu
+          memory = "${var.memory_mib}Mi"
+        }
       }
 
       dynamic "volume_mounts" {
@@ -130,6 +137,22 @@ resource "google_cloud_run_v2_service" "service" {
               version = "latest"
             }
           }
+        }
+      }
+
+      # The Go runtime reads the container's CPU limit but not its memory limit, so its garbage
+      # collector lets the heap grow to twice what it last kept, unaware of the ceiling, and an
+      # instance can be killed for memory it no longer needed. GOMEMLIMIT tells it the ceiling: nine
+      # tenths of the container's, the rest being what the collector does not manage -- goroutine
+      # stacks, the runtime itself, and what is written to /tmp, which on Cloud Run is memory too.
+      # Last among the variables, so that adding it to a service is an addition rather than every
+      # other variable moving down; left out where the caller sets its own, as a name may appear
+      # once.
+      dynamic "env" {
+        for_each = contains(concat(keys(var.environment_variables), keys(var.secret_environment_variables)), "GOMEMLIMIT") ? [] : [1]
+        content {
+          name  = "GOMEMLIMIT"
+          value = "${floor(var.memory_mib * 0.9)}MiB"
         }
       }
     }

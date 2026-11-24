@@ -177,3 +177,21 @@ variable "binary_authorization" {
   description = "Whether the service is enrolled in the project's Binary Authorization policy. What enrolment means is the policy's to decide: under a dry-run policy every deploy is admitted and the ones that would have been refused are logged, and under an enforced one they are refused."
   default     = true
 }
+
+variable "memory_mib" {
+  type        = number
+  description = "The container's memory limit, in MiB. The Go runtime is told nine tenths of it, as GOMEMLIMIT, unless environment_variables sets its own. Cloud Run's default, 512, unless a service needs more."
+  default     = 512
+
+  validation {
+    # Cloud Run's floor, and a whole number of MiB, which both units are written in.
+    condition     = var.memory_mib >= 128 && floor(var.memory_mib) == var.memory_mib
+    error_message = "memory_mib must be a whole number of MiB, at least 128, Cloud Run's minimum."
+  }
+}
+
+variable "cpu" {
+  type        = string
+  description = "The container's CPU limit, in Cloud Run's notation. Declared beside the memory, as the limits are one map. \"1000m\" -- one CPU, as the API writes it back -- is Cloud Run's default."
+  default     = "1000m"
+}
