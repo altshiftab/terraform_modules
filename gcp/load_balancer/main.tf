@@ -186,7 +186,7 @@ resource "google_compute_ssl_policy" "ssl_policy" {
     project = var.project_id
     name = "${var.name}-ssl-policy"
     min_tls_version = "TLS_1_2"
-    profile = "RESTRICTED"
+    profile = var.ssl_policy_profile
 
     depends_on = [google_project_service.compute]
 }
